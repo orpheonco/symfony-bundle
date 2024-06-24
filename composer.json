@@ -1,0 +1,13 @@
+{
+    "name": "orpheon/translation-provider",
+    "type": "symfony-translation-bridge",
+    "require": {
+        "symfony/translation": "^7.0"
+    },
+
+    "autoload": {
+        "psr-4": {
+            "Orpheon\\TranslationProvider\\": "src/"
+        }
+    }
+}
