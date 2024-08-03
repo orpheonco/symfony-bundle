@@ -48,6 +48,7 @@ class OrpheonProviderFactory extends AbstractProviderFactory
             $this->logger,
             $this->loader,
             $this->xliffFileDumper,
+            $endpoint,
             $this->defaultLocale
         );
     }

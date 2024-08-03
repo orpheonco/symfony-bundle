@@ -20,13 +20,14 @@ class OrpheonProvider implements ProviderInterface
         private readonly LoggerInterface $logger,
         private readonly LoaderInterface $loader,
         private readonly XliffFileDumper $xliffFileDumper,
+        private readonly string $endpoint,
         private readonly string $defaultLocale
     ) {
     }
 
     public function __toString(): string
     {
-        return sprintf('orpheon://%s', 'https://orpheon.eu.ngrok.io');
+        return sprintf('orpheon://%s', $this->endpoint);
     }
 
     public function write(TranslatorBagInterface $translatorBag): void
