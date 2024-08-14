@@ -49,6 +49,7 @@ class OrpheonProviderFactory extends AbstractProviderFactory
             $this->loader,
             $this->xliffFileDumper,
             $endpoint,
+            $dsn->getUser(),
             $this->defaultLocale
         );
     }

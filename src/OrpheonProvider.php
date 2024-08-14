@@ -21,6 +21,7 @@ class OrpheonProvider implements ProviderInterface
         private readonly LoaderInterface $loader,
         private readonly XliffFileDumper $xliffFileDumper,
         private readonly string $endpoint,
+        private readonly string $projectId,
         private readonly string $defaultLocale
     ) {
     }
@@ -42,7 +43,7 @@ class OrpheonProvider implements ProviderInterface
         $domains[] = 'messages';
         foreach ($locales as $locale) {
             foreach ($domains as $domain) {
-                $response = $this->client->request('GET', '/keys', [
+                $response = $this->client->request('GET', '/projects/'.$this->projectId.'/keys', [
                     'query' => [
                         // 'domain' => $domain,
                         'locale' => $locale,
