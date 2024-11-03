@@ -25,7 +25,7 @@ class OrpheonProviderFactory extends AbstractProviderFactory
     }
 
     // private const string HOST = 'api.orpheon.co';
-    private const string HOST = 'orpheon.eu.ngrok.io';
+    public const string HOST = 'orpheon.eu.ngrok.io';
 
     protected function getSupportedSchemes(): array
     {
@@ -41,6 +41,7 @@ class OrpheonProviderFactory extends AbstractProviderFactory
         $endpoint = 'default' === $dsn->getHost() ? self::HOST : $dsn->getHost();
         $client = $this->client->withOptions([
             'base_uri' => 'https://'.$endpoint,
+            'auth_bearer' => $dsn->getPassword(),
         ]);
 
         return new OrpheonProvider(
