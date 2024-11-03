@@ -15,6 +15,8 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class OrpheonProviderFactory extends AbstractProviderFactory
 {
+    public const string API_HOST = 'api.orpheon.co';
+
     public function __construct(
         private readonly HttpClientInterface $client,
         private readonly LoggerInterface $logger,
@@ -24,8 +26,6 @@ class OrpheonProviderFactory extends AbstractProviderFactory
     ) {
     }
 
-    // private const string HOST = 'api.orpheon.co';
-    public const string HOST = 'orpheon.eu.ngrok.io';
 
     protected function getSupportedSchemes(): array
     {
@@ -38,7 +38,7 @@ class OrpheonProviderFactory extends AbstractProviderFactory
             throw new UnsupportedSchemeException($dsn, 'orpheon', $this->getSupportedSchemes());
         }
 
-        $endpoint = 'default' === $dsn->getHost() ? self::HOST : $dsn->getHost();
+        $endpoint = 'default' === $dsn->getHost() ? self::API_HOST : $dsn->getHost();
         $client = $this->client->withOptions([
             'base_uri' => 'https://'.$endpoint,
             'auth_bearer' => $dsn->getPassword(),
