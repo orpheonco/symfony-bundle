@@ -42,6 +42,8 @@ class OrpheonProviderFactory extends AbstractProviderFactory
         $client = $this->client->withOptions([
             'base_uri' => 'https://'.$endpoint,
             'auth_bearer' => $dsn->getPassword(),
+            'verify_peer' => false,
+            'verify_host' => false
         ]);
 
         return new OrpheonProvider(
