@@ -22,13 +22,13 @@ class OrpheonProvider implements ProviderInterface
         private readonly XliffFileDumper $xliffFileDumper,
         private readonly string $endpoint,
         private readonly string $projectId,
-        private readonly string $defaultLocale
+        private readonly string $defaultLocale,
     ) {
     }
 
     public function __toString(): string
     {
-        return sprintf('orpheon://%s', $this->endpoint);
+        return \sprintf('orpheon://%s', $this->endpoint);
     }
 
     public function write(TranslatorBagInterface $translatorBag): void
