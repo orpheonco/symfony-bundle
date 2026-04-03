@@ -65,6 +65,7 @@ class OrpheonProvider implements ProviderInterface
                             'domain' => $apiDomain,
                             'phrases' => $phrases,
                         ],
+                        'headers' => ['Content-Type' => 'application/ld+json'],
                     ]);
                 }
 
