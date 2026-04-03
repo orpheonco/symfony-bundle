@@ -6,9 +6,9 @@ namespace Orpheon\TranslationProvider;
 
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Translation\Dumper\XliffFileDumper;
+use Symfony\Component\Translation\Exception\ProviderException;
 use Symfony\Component\Translation\Loader\LoaderInterface;
 use Symfony\Component\Translation\MessageCatalogue;
-use Symfony\Component\Translation\Exception\ProviderException;
 use Symfony\Component\Translation\Provider\ProviderInterface;
 use Symfony\Component\Translation\TranslatorBag;
 use Symfony\Component\Translation\TranslatorBagInterface;
