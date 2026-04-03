@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Orpheon\TranslationProvider;
 
 use Psr\Log\LoggerInterface;
+use Symfony\Component\Mime\Part\DataPart;
+use Symfony\Component\Mime\Part\Multipart\FormDataPart;
 use Symfony\Component\Translation\Dumper\XliffFileDumper;
 use Symfony\Component\Translation\Exception\ProviderException;
 use Symfony\Component\Translation\Loader\LoaderInterface;
@@ -34,67 +36,42 @@ class OrpheonProvider implements ProviderInterface
 
     public function write(TranslatorBagInterface $translatorBag): void
     {
-        $keysByDomain = [];
+        $branchId = $this->getDefaultBranchId();
 
         foreach ($translatorBag->getCatalogues() as $catalogue) {
             $locale = $catalogue->getLocale();
 
             foreach ($catalogue->getDomains() as $domain) {
-                foreach ($catalogue->all($domain) as $source => $translation) {
-                    $keysByDomain[$domain][$source][] = ['locale' => $locale, 'text' => $translation];
+                if (0 === \count($catalogue->all($domain))) {
+                    continue;
                 }
-            }
-        }
 
-        $existingKeys = $this->getExistingKeys();
+                $content = $this->xliffFileDumper->formatCatalogue($catalogue, $domain, [
+                    'default_locale' => $this->defaultLocale,
+                ]);
 
-        foreach ($keysByDomain as $domain => $keys) {
-            foreach ($keys as $source => $phrases) {
-                $apiDomain = 'messages' !== $domain ? $domain : null;
-                $existingKeyId = $existingKeys[$apiDomain][$source] ?? null;
+                $filename = \sprintf('%s.%s.xlf', $domain, $locale);
 
-                if (null !== $existingKeyId) {
-                    $response = $this->client->request('PATCH', '/keys/'.$existingKeyId, [
-                        'json' => ['phrases' => $phrases],
-                        'headers' => ['Content-Type' => 'application/merge-patch+json'],
-                    ]);
-                } else {
-                    $response = $this->client->request('POST', '/projects/'.$this->projectId.'/keys', [
-                        'json' => [
-                            'source' => $source,
-                            'domain' => $apiDomain,
-                            'phrases' => $phrases,
-                        ],
-                        'headers' => ['Content-Type' => 'application/ld+json'],
-                    ]);
-                }
+                $formData = new FormDataPart([
+                    'file' => new DataPart($content, $filename, 'application/x-xliff+xml'),
+                ]);
+
+                $response = $this->client->request('POST', '/resources/'.$branchId.'/upload', [
+                    'headers' => $formData->getPreparedHeaders()->toArray(),
+                    'body' => $formData->bodyToString(),
+                ]);
 
                 $statusCode = $response->getStatusCode();
 
                 if ($statusCode >= 300) {
-                    $this->logger->error(\sprintf('Unable to push translation key "%s" to Orpheon: (status code: "%s") "%s".', $source, $statusCode, $response->getContent(false)));
+                    $this->logger->error(\sprintf('Unable to upload translations for "%s" (%s) to Orpheon: (status code: "%s") "%s".', $domain, $locale, $statusCode, $response->getContent(false)));
 
                     if ($statusCode >= 500) {
-                        throw new ProviderException(\sprintf('Unable to push translation key "%s" to Orpheon: (status code: "%s").', $source, $statusCode), $response);
+                        throw new ProviderException(\sprintf('Unable to upload translations for "%s" (%s) to Orpheon: (status code: "%s").', $domain, $locale, $statusCode), $response);
                     }
                 }
             }
         }
-    }
-
-    /**
-     * @return array<string|null, array<string, string>> Indexed by domain then source, value is the key ID
-     */
-    private function getExistingKeys(): array
-    {
-        $response = $this->client->request('GET', '/projects/'.$this->projectId.'/keys');
-
-        $keys = [];
-        foreach ($response->toArray()['member'] as $entry) {
-            $keys[$entry['domain'] ?? null][$entry['source']] = $entry['id'];
-        }
-
-        return $keys;
     }
 
     public function read(array $domains, array $locales): TranslatorBag
@@ -106,7 +83,6 @@ class OrpheonProvider implements ProviderInterface
             foreach ($domains as $domain) {
                 $response = $this->client->request('GET', '/projects/'.$this->projectId.'/keys', [
                     'query' => [
-                        // 'domain' => $domain,
                         'locale' => $locale,
                     ],
                 ]);
@@ -135,5 +111,13 @@ class OrpheonProvider implements ProviderInterface
     public function delete(TranslatorBagInterface $translatorBag): void
     {
         // TODO: Implement delete() method.
+    }
+
+    private function getDefaultBranchId(): string
+    {
+        $response = $this->client->request('GET', '/projects/'.$this->projectId);
+        $project = $response->toArray();
+
+        return $project['branches'][0]['id'];
     }
 }
