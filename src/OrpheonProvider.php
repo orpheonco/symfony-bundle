@@ -118,6 +118,6 @@ class OrpheonProvider implements ProviderInterface
         $response = $this->client->request('GET', '/projects/'.$this->projectId);
         $project = $response->toArray();
 
-        return $project['branches'][0]['id'];
+        return $project['defaultBranch']['id'];
     }
 }
