@@ -6,6 +6,6 @@ namespace Orpheon\TranslationProvider;
 
 use Symfony\Component\HttpKernel\Bundle\Bundle;
 
-class TranslationProviderBundle extends Bundle
+final class TranslationProviderBundle extends Bundle
 {
 }

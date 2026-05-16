@@ -9,23 +9,21 @@ use Symfony\Component\Mime\Part\DataPart;
 use Symfony\Component\Mime\Part\Multipart\FormDataPart;
 use Symfony\Component\Translation\Dumper\XliffFileDumper;
 use Symfony\Component\Translation\Exception\ProviderException;
-use Symfony\Component\Translation\Loader\LoaderInterface;
 use Symfony\Component\Translation\MessageCatalogue;
 use Symfony\Component\Translation\Provider\ProviderInterface;
 use Symfony\Component\Translation\TranslatorBag;
 use Symfony\Component\Translation\TranslatorBagInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
-class OrpheonProvider implements ProviderInterface
+final class OrpheonProvider implements ProviderInterface
 {
     public function __construct(
         private readonly HttpClientInterface $client,
         private readonly LoggerInterface $logger,
-        private readonly LoaderInterface $loader,
         private readonly XliffFileDumper $xliffFileDumper,
+        private readonly string $defaultLocale,
         private readonly string $endpoint,
         private readonly string $projectId,
-        private readonly string $defaultLocale,
     ) {
     }
 
@@ -39,6 +37,10 @@ class OrpheonProvider implements ProviderInterface
         $branchId = $this->getDefaultBranchId();
 
         foreach ($translatorBag->getCatalogues() as $catalogue) {
+            if (!$catalogue instanceof MessageCatalogue) {
+                continue;
+            }
+
             $locale = $catalogue->getLocale();
 
             foreach ($catalogue->getDomains() as $domain) {
@@ -56,40 +58,58 @@ class OrpheonProvider implements ProviderInterface
                     'file' => new DataPart($content, $filename, 'application/x-xliff+xml'),
                 ]);
 
-                $response = $this->client->request('POST', '/resources/'.$branchId.'/upload', [
+                $response = $this->client->request('POST', \sprintf('/resources/%s/upload', rawurlencode($branchId)), [
                     'headers' => $formData->getPreparedHeaders()->toArray(),
                     'body' => $formData->bodyToString(),
                 ]);
 
-                $statusCode = $response->getStatusCode();
+                if (300 <= $statusCode = $response->getStatusCode()) {
+                    $this->logger->error(\sprintf('Unable to upload translations for domain "%s" and locale "%s" to Orpheon: (status code: "%s") "%s".', $domain, $locale, $statusCode, $response->getContent(false)));
 
-                if ($statusCode >= 300) {
-                    $this->logger->error(\sprintf('Unable to upload translations for "%s" (%s) to Orpheon: (status code: "%s") "%s".', $domain, $locale, $statusCode, $response->getContent(false)));
-
-                    if ($statusCode >= 500) {
-                        throw new ProviderException(\sprintf('Unable to upload translations for "%s" (%s) to Orpheon: (status code: "%s").', $domain, $locale, $statusCode), $response);
+                    if (500 <= $statusCode) {
+                        throw new ProviderException(\sprintf('Unable to upload translations for domain "%s" and locale "%s" to Orpheon: (status code: "%s").', $domain, $locale, $statusCode), $response);
                     }
                 }
             }
         }
     }
 
+    /**
+     * @param string[] $domains
+     * @param string[] $locales
+     */
     public function read(array $domains, array $locales): TranslatorBag
     {
+        $domains = $domains ?: ['messages'];
         $translatorBag = new TranslatorBag();
 
-        $domains[] = 'messages';
         foreach ($locales as $locale) {
             foreach ($domains as $domain) {
-                $response = $this->client->request('GET', '/projects/'.$this->projectId.'/keys', [
+                $response = $this->client->request('GET', \sprintf('/projects/%s/keys', rawurlencode($this->projectId)), [
                     'query' => [
+                        'domain' => $domain,
                         'locale' => $locale,
                     ],
                 ]);
 
-                $data = $response->toArray()['member'];
+                if (404 === $response->getStatusCode()) {
+                    $this->logger->warning(\sprintf('Project "%s" does not exist in Orpheon.', $this->projectId));
+                    continue;
+                }
+
+                if (200 !== $statusCode = $response->getStatusCode()) {
+                    $this->logger->error(\sprintf('Unable to read the Orpheon response for domain "%s" and locale "%s": "%s".', $domain, $locale, $response->getContent(false)));
+
+                    if (500 <= $statusCode) {
+                        throw new ProviderException(\sprintf('Unable to read the Orpheon response for domain "%s" and locale "%s".', $domain, $locale), $response);
+                    }
+
+                    continue;
+                }
+
                 $catalogue = new MessageCatalogue($locale);
-                foreach ($data as $entry) {
+
+                foreach ($response->toArray()['member'] as $entry) {
                     foreach ($entry['phrases'] as $phrase) {
                         if ($phrase['locale'] !== $locale) {
                             continue;
@@ -98,8 +118,6 @@ class OrpheonProvider implements ProviderInterface
                         $catalogue->set($entry['source'], $phrase['text'], $domain);
                     }
                 }
-
-                $this->xliffFileDumper->formatCatalogue($catalogue, $domain, ['default_locale' => $this->defaultLocale]);
 
                 $translatorBag->addCatalogue($catalogue);
             }
@@ -115,9 +133,14 @@ class OrpheonProvider implements ProviderInterface
 
     private function getDefaultBranchId(): string
     {
-        $response = $this->client->request('GET', '/projects/'.$this->projectId);
-        $project = $response->toArray();
+        $response = $this->client->request('GET', \sprintf('/projects/%s', rawurlencode($this->projectId)));
 
-        return $project['defaultBranch']['id'];
+        if (200 !== $statusCode = $response->getStatusCode()) {
+            $this->logger->error(\sprintf('Unable to get the default branch for project "%s" from Orpheon: (status code: "%s") "%s".', $this->projectId, $statusCode, $response->getContent(false)));
+
+            throw new ProviderException(\sprintf('Unable to get the default branch for project "%s" from Orpheon.', $this->projectId), $response);
+        }
+
+        return $response->toArray()['defaultBranch']['id'];
     }
 }
