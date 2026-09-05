@@ -17,6 +17,8 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 final class OrpheonProvider implements ProviderInterface
 {
+    private const DEFAULT_BRANCH_NAME = 'main';
+
     public function __construct(
         private readonly HttpClientInterface $client,
         private readonly LoggerInterface $logger,
@@ -141,6 +143,22 @@ final class OrpheonProvider implements ProviderInterface
             throw new ProviderException(\sprintf('Unable to get the default branch for project "%s" from Orpheon.', $this->projectId), $response);
         }
 
-        return $response->toArray()['defaultBranch']['id'];
+        $project = $response->toArray();
+
+        if (isset($project['defaultBranch']['id'])) {
+            return $project['defaultBranch']['id'];
+        }
+
+        // Projects created before the default branch was recorded only expose
+        // their branch list, so fall back to the one named after the default.
+        foreach ($project['branches'] ?? [] as $branch) {
+            if (isset($branch['id'], $branch['name']) && self::DEFAULT_BRANCH_NAME === $branch['name']) {
+                return $branch['id'];
+            }
+        }
+
+        $this->logger->error(\sprintf('Project "%s" from Orpheon exposes no default branch and no branch named "%s".', $this->projectId, self::DEFAULT_BRANCH_NAME));
+
+        throw new ProviderException(\sprintf('Unable to get the default branch for project "%s" from Orpheon.', $this->projectId), $response);
     }
 }
