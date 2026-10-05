@@ -65,13 +65,17 @@ final class OrpheonProvider implements ProviderInterface
                     'body' => $formData->bodyToString(),
                 ]);
 
+                // Any refusal fails the push: reporting success for a file the
+                // server turned down would leave the caller none the wiser.
                 if (300 <= $statusCode = $response->getStatusCode()) {
                     $this->logger->error(\sprintf('Unable to upload translations for domain "%s" and locale "%s" to Orpheon: (status code: "%s") "%s".', $domain, $locale, $statusCode, $response->getContent(false)));
 
-                    if (500 <= $statusCode) {
-                        throw new ProviderException(\sprintf('Unable to upload translations for domain "%s" and locale "%s" to Orpheon: (status code: "%s").', $domain, $locale, $statusCode), $response);
-                    }
+                    throw new ProviderException(\sprintf('Unable to upload translations for domain "%s" and locale "%s" to Orpheon: (status code: "%s").', $domain, $locale, $statusCode), $response);
                 }
+
+                // The upload is accepted before it is parsed: the keys show up
+                // once Orpheon has processed the file, not when this returns.
+                $this->logger->info(\sprintf('Translations for domain "%s" and locale "%s" were uploaded to Orpheon and are queued for processing.', $domain, $locale));
             }
         }
     }
@@ -94,24 +98,23 @@ final class OrpheonProvider implements ProviderInterface
                     ],
                 ]);
 
-                if (404 === $response->getStatusCode()) {
-                    $this->logger->warning(\sprintf('Project "%s" does not exist in Orpheon.', $this->projectId));
-                    continue;
-                }
-
+                // A failed read must not pass for an empty catalogue: a forced pull
+                // would then overwrite the local translations with nothing.
                 if (200 !== $statusCode = $response->getStatusCode()) {
-                    $this->logger->error(\sprintf('Unable to read the Orpheon response for domain "%s" and locale "%s": "%s".', $domain, $locale, $response->getContent(false)));
+                    $this->logger->error(\sprintf('Unable to read the Orpheon response for domain "%s" and locale "%s": (status code: "%s") "%s".', $domain, $locale, $statusCode, $response->getContent(false)));
 
-                    if (500 <= $statusCode) {
-                        throw new ProviderException(\sprintf('Unable to read the Orpheon response for domain "%s" and locale "%s".', $domain, $locale), $response);
-                    }
-
-                    continue;
+                    throw new ProviderException(\sprintf('Unable to read the Orpheon response for domain "%s" and locale "%s" (status code: "%s").', $domain, $locale, $statusCode), $response);
                 }
 
                 $catalogue = new MessageCatalogue($locale);
 
                 foreach ($response->toArray()['member'] as $entry) {
+                    // Keys come back for every domain of the project; Orpheon
+                    // stores the default "messages" domain as null.
+                    if ((($entry['domain'] ?? null) ?: 'messages') !== $domain) {
+                        continue;
+                    }
+
                     foreach ($entry['phrases'] as $phrase) {
                         if ($phrase['locale'] !== $locale) {
                             continue;
